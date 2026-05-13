@@ -33,21 +33,8 @@ pip install requests pycryptodome
 
 ## 使用方式
 
-### 作为 cron 脚本
-
 ```bash
-python3 ~/scripts/ugnas_credits.py
-```
-
-### 输出格式
-
-```
-📊 绿联论坛积分日报
-👤 用户：默笙 (UID: 164)
-📅 日期：2026-05-13
-💰 当前积分：1382
-📈 较上次：+10
-🔥 连续增长：3 天
+python3 scripts/ugnas_credits.py
 ```
 
 ## API 接口
@@ -59,9 +46,3 @@ python3 ~/scripts/ugnas_credits.py
 3. `POST /api/oauth/token` — 获取 access_token
 4. `GET /api/oauth/authorize` — 授权回调获取 Cookie
 5. `GET /home.php?mod=space` — 获取用户资料和积分
-
-## 注意事项
-
-- OAuth Token 有时效，每次查询需重新获取
-- Cookie 中的 `6LQh_2132_auth` 是关键认证字段
-- 积分页面在用户主页 HTML 中，需正则提取
