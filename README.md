@@ -62,7 +62,7 @@ ugnas-credits-monitor/
 └── scripts/                     # 独立部署版
     ├── setup.sh                 # 一键安装
     ├── ugnas_credits.py         # 积分查询脚本
-    └── config.json.example      # 配置模板
+    └── config.json      # 配置模板
 ```
 
 ## 输出示例
