@@ -1,71 +1,82 @@
-# 🍋 绿联论坛积分监控
+# 绿联论坛积分日报监控
 
-每日自动查询绿联论坛 (club.ugnas.com) 积分变动并推送通知。
+每日自动查询绿联论坛积分变动，支持青龙面板 / 独立部署两种方式。
 
-## ✨ 功能
+## 方式一：青龙面板（推荐）
 
-- 🔐 OAuth API 自动登录（无需手动抓 Cookie）
-- 📊 积分变动追踪
-- 📱 每日微信推送报告
-- 💾 历史记录保存
+### 1. 上传脚本
 
-## 🚀 安装
+将 `ql/ugnas_credits.py` 上传到青龙面板的 `scripts/` 目录
 
-### 依赖
+### 2. 安装依赖
+
+青龙面板 → 订阅管理 → 依赖管理 → 添加：
+- `requests`
+- `pycryptodome`
+
+### 3. 配置环境变量
+
+青龙面板 → 环境变量 → 添加：
+
+| 变量名 | 值 | 必填 |
+|--------|-----|------|
+| `UGNAS_USERNAME` | 绿联论坛手机号 | ✅ |
+| `UGNAS_PASSWORD` | 绿联论坛密码 | ✅ |
+| `UGNAS_UID` | 用户 UID | ❌（留空自动获取） |
+
+### 4. 创建定时任务
+
+青龙面板 → 定时任务 → 新建：
+
+- **命令**：`task ugnas_credits.py`
+- **定时**：`0 9 * * *`（每天早上 9 点）
+
+### 5. 配置通知
+
+青龙面板 → 系统设置 → 通知设置，选择你需要的推送方式（TG/Bark/钉钉/微信等）。
+
+脚本只需 `print` 输出，青龙会自动推送通知，**不需要额外配置 Server酱3**。
+
+---
+
+## 方式二：独立部署（无青龙面板）
+
+### 一键安装
 
 ```bash
-pip install requests pycryptodome
+bash scripts/setup.sh
 ```
 
-### 配置
+跟着提示输入账号信息和 Server酱3 SendKey 即可。
 
-设置环境变量：
+---
 
-```bash
-export UGNAS_USERNAME="你的用户名"
-export UGNAS_PASSWORD="你的密码"
-export UGNAS_UID="你的UID"  # 可选，默认 164
-```
-
-或修改脚本中的默认值。
-
-### 运行
-
-```bash
-python3 ugnas_credits.py
-```
-
-## 📋 输出示例
-
-```
-📊 绿联论坛积分日报
-👤 用户：默笙 (UID: 164)
-📅 日期：2026-05-13
-💰 当前积分：1382
-📈 较上次：+10
-🔥 连续增长：3 天
-```
-
-## 🔧 技术原理
-
-绿联论坛 OAuth 登录流程：
-
-1. 获取加密密钥 (`/api/user/v3/sa/encrypt/key`)
-2. AES-128-CBC 加密用户名密码
-3. 获取 OAuth Token (`/api/oauth/token`)
-4. 授权回调获取 Cookie
-5. 访问用户主页获取积分
-
-## 📁 文件结构
+## 项目结构
 
 ```
 ugnas-credits-monitor/
 ├── README.md
-├── SKILL.md
-└── scripts/
-    └── ugnas_credits.py
+├── .gitignore
+├── ql/                          # 青龙面板版
+│   └── ugnas_credits.py         # 单文件，丢进青龙就能跑
+└── scripts/                     # 独立部署版
+    ├── setup.sh                 # 一键安装
+    ├── ugnas_credits.py         # 积分查询脚本
+    ├── config.json.example      # 配置模板
+    └── .env.example             # 环境变量模板
 ```
 
-## 📄 License
+## 输出示例
+
+```
+📊 绿联论坛积分日报
+👤 用户：张三 (UID: 12345)
+👥 用户组：VIP会员
+📅 日期：2026-05-15
+💰 当前积分：2560
+📈 较上次：+15
+```
+
+## License
 
 MIT
