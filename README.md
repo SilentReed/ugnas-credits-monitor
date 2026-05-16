@@ -63,7 +63,7 @@ ugnas-credits-monitor/
     ├── setup.sh                 # 一键安装
     ├── ugnas_credits.py         # 积分查询脚本
     ├── config.json.example      # 配置模板
-    └── .env.example             # 环境变量模板
+    
 ```
 
 ## 输出示例
