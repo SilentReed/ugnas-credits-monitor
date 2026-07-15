@@ -127,7 +127,7 @@ configure() {
     echo ""
     echo "───────────────────────────────────────"
     echo "Server酱3 推送配置"
-    echo "  获取地址: https://sct.ft07.com/"
+    echo "  获取地址: https://sc3.ft07.com/"
     echo "───────────────────────────────────────"
     read -rp "Server酱3 SendKey: " SC_KEY
 
