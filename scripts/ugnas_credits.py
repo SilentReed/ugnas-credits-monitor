@@ -6,7 +6,7 @@
 用法：
   python3 ugnas_credits.py
 
-环境变量（或在 config.json 中配置）：
+环境变量：
   UGNAS_USERNAME  - 绿联论坛用户名/手机号
   UGNAS_PASSWORD  - 绿联论坛密码
   UGNAS_UID       - 用户 UID（留空自动获取）
@@ -17,21 +17,15 @@ import re
 import json
 import uuid
 import base64
+import time
 import requests
 from datetime import datetime
 from urllib.parse import quote
 
 # ─── 配置 ───────────────────────────────────────────
-# 优先从环境变量读取，其次从 config.json 读取
-_config = {}
-_config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
-if os.path.exists(_config_path):
-    with open(_config_path, "r", encoding="utf-8") as f:
-        _config = json.load(f)
-
-USERNAME = os.environ.get("UGNAS_USERNAME", _config.get("username", ""))
-PASSWORD = os.environ.get("UGNAS_PASSWORD", _config.get("password", ""))
-UID = os.environ.get("UGNAS_UID", _config.get("uid", ""))
+USERNAME = os.environ.get("UGNAS_USERNAME", "")
+PASSWORD = os.environ.get("UGNAS_PASSWORD", "")
+UID = os.environ.get("UGNAS_UID", "")
 BASE_URL = "https://club.ugnas.com"
 API_BASE = "https://api-zh.ugnas.com"
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
@@ -39,6 +33,31 @@ UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML,
 # 数据文件
 DATA_DIR = os.path.expanduser("~/.hermes/data/ugnas")
 DATA_FILE = os.path.join(DATA_DIR, "credits.json")
+
+# 重试配置
+MAX_RETRIES = 3
+RETRY_DELAY = 2  # 秒
+
+
+def _request_with_retry(method, url, session=None, **kwargs):
+    """带重试的 HTTP 请求，4xx 客户端错误（除 429）不重试"""
+    kwargs.setdefault("timeout", 15)
+    last_exc = None
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            requester = session or requests
+            resp = requester.request(method, url, **kwargs)
+            resp.raise_for_status()
+            return resp
+        except (requests.RequestException, requests.HTTPError) as e:
+            last_exc = e
+            if attempt < MAX_RETRIES:
+                if hasattr(e, 'response') and e.response is not None:
+                    code = e.response.status_code
+                    if 400 <= code < 500 and code != 429:
+                        raise
+                time.sleep(RETRY_DELAY * attempt)
+    raise last_exc
 
 
 def aes_encrypt(text: str, key_str: str, iv_str: str) -> str:
@@ -63,7 +82,8 @@ def get_encrypt_key(session: requests.Session) -> tuple:
         'Referer': 'https://web.ugnas.com/',
     }
 
-    r = session.get(f'{API_BASE}/api/user/v3/sa/encrypt/key', headers=headers, timeout=12)
+    r = _request_with_retry('GET', f'{API_BASE}/api/user/v3/sa/encrypt/key',
+                            session=session, headers=headers)
     data = r.json()
     api_data = data.get('data', {})
 
@@ -101,7 +121,8 @@ def get_access_token(session: requests.Session, encrypt_key: str, api_uuid: str)
         'uuid': (None, api_uuid),
     }
 
-    r = session.post(f'{API_BASE}/api/oauth/token', headers=form_headers, data=files, timeout=12)
+    r = _request_with_retry('POST', f'{API_BASE}/api/oauth/token',
+                            session=session, headers=form_headers, data=files)
     tok = r.json()
 
     # 支持多种 token 结构
@@ -129,10 +150,12 @@ def authorize_and_get_cookie(session: requests.Session, access_token: str) -> st
     state = uuid.uuid4().hex[:12]
     authorize_url = (
         f'{API_BASE}/api/oauth/authorize?response_type=code&client_id=discuz-client&scope=user_info'
-        f'&state={state}&redirect_uri={quote("https://club.ugnas.com/api/ugreen/callback.php")}&access_token={access_token}'
+        f'&state={state}&redirect_uri={quote("https://club.ugnas.com/api/ugreen/callback.php")}'
+        f'&access_token={access_token}'
     )
 
-    r = session.get(authorize_url, headers=headers, allow_redirects=False, timeout=12)
+    r = _request_with_retry('GET', authorize_url, session=session,
+                            headers=headers, allow_redirects=False)
     loc = r.headers.get('location') or r.headers.get('Location')
 
     if not loc:
@@ -144,8 +167,8 @@ def authorize_and_get_cookie(session: requests.Session, access_token: str) -> st
         'Accept-Language': 'zh-CN'
     }
 
-    session.get(loc, headers=callback_headers, timeout=12)
-    session.get(f'{BASE_URL}/', headers=callback_headers, timeout=12)
+    _request_with_retry('GET', loc, session=session, headers=callback_headers)
+    _request_with_retry('GET', f'{BASE_URL}/', session=session, headers=callback_headers)
 
     # 收集 Cookie
     cookie_items = [f"{c.name}={c.value}" for c in session.cookies]
@@ -176,7 +199,7 @@ def fetch_user_profile(session: requests.Session, cookie: str) -> dict:
     uid = UID
     if not uid:
         for url in [f'{BASE_URL}/forum.php?mod=forumdisplay&fid=0', f'{BASE_URL}/home.php']:
-            r = session.get(url, headers=headers, timeout=12)
+            r = _request_with_retry('GET', url, session=session, headers=headers)
             patterns = [
                 r'discuz_uid\s*=\s*\'?(\d+)\'?',
                 r'home\.php\?mod=space(?:&|&amp;)uid=(\d+)',
@@ -195,7 +218,7 @@ def fetch_user_profile(session: requests.Session, cookie: str) -> dict:
     else:
         url = f'{BASE_URL}/home.php?mod=space'
 
-    r = session.get(url, headers=headers, timeout=12)
+    r = _request_with_retry('GET', url, session=session, headers=headers)
     html = r.text
 
     # 解析用户信息
@@ -275,7 +298,7 @@ def generate_report(info: dict, change: int, is_first: bool) -> str:
     else:
         change_str = f"+{change}" if change > 0 else str(change)
         emoji = "📈" if change > 0 else ("➖" if change == 0 else "📉")
-        lines.append(f"📈 较上次：{change_str}")
+        lines.append(f"{emoji} 较上次：{change_str}")
 
     return "\n".join(lines)
 
@@ -283,7 +306,7 @@ def generate_report(info: dict, change: int, is_first: bool) -> str:
 def main():
     """主函数"""
     if not USERNAME or not PASSWORD:
-        print("❌ 请设置环境变量 UGNAS_USERNAME 和 UGNAS_PASSWORD，或在 config.json 中配置")
+        print("❌ 请设置环境变量 UGNAS_USERNAME 和 UGNAS_PASSWORD")
         exit(1)
 
     try:
