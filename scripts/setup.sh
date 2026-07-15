@@ -9,6 +9,11 @@ set -e
 INSTALL_DIR="$HOME/ugnas-credits-monitor"
 DATA_DIR="$HOME/.hermes/data/ugnas"
 CRON_TAG="# ugnas-credits-monitor"
+VENV_DIR="$INSTALL_DIR/venv"
+
+# 国内 pip 镜像源（阿里云）
+PIP_INDEX="https://mirrors.aliyun.com/pypi/simple/"
+PIP_TRUSTED="mirrors.aliyun.com"
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -33,13 +38,46 @@ check_python() {
     info "Python 版本: $PY_VER"
 }
 
+# ─── 创建虚拟环境 ───────────────────────────────────
+setup_venv() {
+    info "配置虚拟环境..."
+
+    # 确保 venv 模块可用
+    if ! $PYTHON -c "import venv" &>/dev/null; then
+        warn "venv 模块不可用，尝试安装..."
+        if command -v apt &>/dev/null; then
+            PY_SHORT=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+            sudo apt install -y "python${PY_SHORT}-venv" 2>/dev/null || {
+                error "请手动安装 python${PY_SHORT}-venv: apt install python${PY_SHORT}-venv"
+                exit 1
+            }
+        else
+            error "无法自动安装 venv 模块，请手动安装"
+            exit 1
+        fi
+    fi
+
+    # 创建虚拟环境
+    if [ ! -d "$VENV_DIR" ]; then
+        $PYTHON -m venv "$VENV_DIR"
+        info "虚拟环境已创建: $VENV_DIR"
+    else
+        info "虚拟环境已存在，跳过创建"
+    fi
+
+    # 切换到虚拟环境的 python 和 pip
+    PYTHON="$VENV_DIR/bin/python"
+    PIP="$VENV_DIR/bin/pip"
+    info "使用虚拟环境 Python: $PYTHON"
+}
+
 # ─── 安装依赖 ────────────────────────────────────────
 install_deps() {
-    info "安装 Python 依赖..."
-    $PYTHON -m pip install --quiet requests pycryptodome 2>/dev/null || {
-        warn "pip 安装失败，尝试 --user 模式..."
-        $PYTHON -m pip install --quiet --user requests pycryptodome
-    }
+    info "安装 Python 依赖（使用阿里云镜像）..."
+    $PIP install --quiet --upgrade pip \
+        -i "$PIP_INDEX" --trusted-host "$PIP_TRUSTED"
+    $PIP install --quiet requests pycryptodome \
+        -i "$PIP_INDEX" --trusted-host "$PIP_TRUSTED"
     info "依赖安装完成"
 }
 
@@ -77,7 +115,8 @@ export UGNAS_PASSWORD="__PASSWORD__"
 export UGNAS_UID="__UID__"
 
 SENDKEY="__SENDKEY__"
-LOG="$HOME/.hermes/data/ugnas/cron.log"
+LOG="__DATA_DIR__/cron.log"
+PYTHON="__PYTHON__"
 
 cd "__INSTALL_DIR__"
 
@@ -161,6 +200,7 @@ EOF
             -e "s|__SENDKEY__|$SC_KEY|g" \
             -e "s|__INSTALL_DIR__|$INSTALL_DIR|g" \
             -e "s|__PYTHON__|$PYTHON|g" \
+            -e "s|__DATA_DIR__|$DATA_DIR|g" \
             "$INSTALL_DIR/scripts/run_daily.sh"
         rm -f "$INSTALL_DIR/scripts/run_daily.sh.bak"
         chmod +x "$INSTALL_DIR/scripts/run_daily.sh"
@@ -215,6 +255,7 @@ main() {
     echo ""
 
     check_python
+    setup_venv
     install_deps
     download_scripts
     configure
@@ -226,9 +267,12 @@ main() {
     info "安装完成！"
     echo ""
     echo "  安装目录: $INSTALL_DIR"
+    echo "  虚拟环境: $VENV_DIR"
     echo "  数据目录: $DATA_DIR"
     echo "  手动运行: $INSTALL_DIR/scripts/run_daily.sh"
     echo "  查看日志: cat $DATA_DIR/cron.log"
+    echo ""
+    echo "  激活虚拟环境: source $VENV_DIR/bin/activate"
     echo "═══════════════════════════════════════"
     echo ""
 }
